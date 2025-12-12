@@ -36,7 +36,7 @@ This module handles the exploration and selection of datasets without loading al
 * **`selectDB`:** The main entry point. It scans directories to find databases matching your requirements.
     * *Filter by Paradigm:* Select only 'MI' (Motor Imagery), 'P300', or 'ERP'.
     * *Filter by Class:* Keep only databases containing specific classes (e.g., `["right_hand", "feet"]`).
-    * *Filter by Quality:* Exclude sessions that do not have enough trials via the `minTrials` argument.
+    * *Filter by Minimum number of trial per class:* Exclude sessions that do not have enough trials via the `minTrials` argument.
 
 **Example:**
 ```python
