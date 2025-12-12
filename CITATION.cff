@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: "pyLittleEegle: Python Tools for FII BCI Corpus"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: "Doumi"
+    given-names: "Fahim"
+    affiliation: "CeSMA, University Federico II, Naples"
+    orcid: "https://orcid.org/0009-0000-0014-8468"
+  - family-names: "Congedo"
+    given-names: "Marco"
+    affiliation: "CNRS, University Grenoble Alpes, Grenoble"
+    orcid: "https://orcid.org/0000-0003-2196-0409"
+repository-code: "https://github.com/FhmDmi/pyLittleEegle"
+url: "https://github.com/FhmDmi/pyLittleEegle"
+keywords:
+  - BCI
+  - EEG
+  - Python
+  - Riemannian Geometry
+  - FII BCI Corpus
+license: BSD-3-Clause
+version: 0.1.0
+date-released: 2025-12-12
