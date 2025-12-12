@@ -1,4 +1,4 @@
-# pyLittleEegle: Python Tools for FII BCI Corpus
+# pyLittleEegle: Python package for FII BCI Corpus
 
 **Version:** 0.1 (Dec 2025)  
 **Authors:** Fahim Doumi (CeSMA, University Federico II, Naples),
