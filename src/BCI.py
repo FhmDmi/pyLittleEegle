@@ -49,7 +49,7 @@ class CVres:
             "⭒  ⭒    ⭒       ⭒         ⭒",
             f".cvType   : {self.cvType}"
         ]
-        
+
         if self.scoring is not None:
             lines.append(f".scoring  : {self.scoring}")
         if self.modelType is not None:
@@ -69,7 +69,7 @@ class CVres:
 
 def encode(o: EEG, 
            paradigm: str = None,
-           covtype: str = 'lwf',
+           covType: str = 'lwf',
            targetLabel: str = "target") -> np.ndarray:
     """
     Encode all trials in an EEG data structure as covariance matrices according to a given BCI paradigm.
@@ -79,7 +79,7 @@ def encode(o: EEG,
         o: an instance of the EEG data structure containing trials and metadata
         paradigm: BCI paradigm, either 'ERP', 'P300', or 'MI'. 
                  By default uses the paradigm stored in o.paradigm
-        covtype: covariance estimator for pyriemann (default: 'lwf')
+        covType: covariance estimator for pyriemann (default: 'lwf')
                 - 'scm': sample covariance matrix
                 - 'lwf': Ledoit-Wolf shrinkage
                 - 'oas': Oracle Approximating Shrinkage
@@ -119,7 +119,7 @@ def encode(o: EEG,
     
     if paradigm == 'MI':
         # For Motor Imagery: direct covariance estimation without prototype
-        cov_estimator = Covariances(estimator=covtype)
+        cov_estimator = Covariances(estimator=covType)
         covs = cov_estimator.transform(trials_array)
         
     elif paradigm == 'P300':
@@ -135,7 +135,7 @@ def encode(o: EEG,
         labels = np.array(o.y)
         
         # Use ERPCovariances with target class
-        cov_estimator = ERPCovariances(classes=[target_idx + 1], estimator=covtype)
+        cov_estimator = ERPCovariances(classes=[target_idx + 1], estimator=covType)
         covs = cov_estimator.fit_transform(trials_array, labels)
     return covs
 
@@ -173,18 +173,18 @@ def crval(clf,
        
         # SVM with linear kernel
         from pyriemann.classification import SVC
-        clf = SVC(kernel='linear')
+        clf = TSclassifier(clf=LinearSVC(max_iter=1000))
         results = crval(clf, covs, labels)
         
         # Tangent Space + Logistic Regression (Lasso)
         from pyriemann.classification import TSclassifier
         from sklearn.linear_model import LogisticRegression
-        clf = TSclassifier(clf=LogisticRegression(penalty='l1', solver='saga'))
+        clf = TSclassifier(clf=LogisticRegression(penalty='l1', solver='saga', max_iter=1000, n_jobs=4))
         results = crval(clf, covs, labels, n_folds=5, shuffle=True, random_state=42)
     """
     
     # Get model type name
-    model_type = clf.__class__.__name__
+    modelType = clf.__class__.__name__
     
     # Initialize arrays
     acc = np.zeros(n_folds)
@@ -221,14 +221,14 @@ def crval(clf,
     exec_time_ms = int((time.perf_counter() - start) * 1000)
    
     # Create result structure
-    cv_type = f"{n_folds}-fold"
+    cvType = f"{n_folds}-fold"
     if shuffle:
-        cv_type += " (shuffled)"
+        cvType += " (shuffled)"
     
     results = CVres(
-        cvType=cv_type,
+        cvType=cvType,
         scoring=scoring,
-        modelType=model_type,
+        modelType=modelType,
         nTrials=len(labels),
         accs=acc,
         avgAcc=float(np.mean(acc)),

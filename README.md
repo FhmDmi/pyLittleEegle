@@ -32,7 +32,7 @@ This module handles the exploration and selection of datasets without loading al
 
 **Key Features:**
 
-* **`infoDB` Structure:** An immutable dataclass that summarizes all metadata of a database (Subject count, sampling rate, paradigms, hardware, etc.).
+* **`InfoDB` Structure:** An immutable dataclass that summarizes all metadata of a database (Subject count, sampling rate, paradigms, hardware, etc.).
 * **`selectDB`:** The main entry point. It scans directories to find databases matching your requirements.
     * *Filter by Paradigm:* Select only 'MI' (Motor Imagery), 'P300', or 'ERP'.
     * *Filter by Class:* Keep only databases containing specific classes (e.g., `["right_hand", "feet"]`).

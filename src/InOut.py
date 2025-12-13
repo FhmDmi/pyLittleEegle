@@ -43,12 +43,12 @@ class EEG:
         run: Serial number of the present run of the above session
         sensors: Labels of the scalp electrode leads in standard notation (10-20, 10-10,...)
         sr: Sampling rate in samples per second
-        ne: Number of electrode leads
+        nSensors: Number of electrode leads
         ns: Number of samples
         wl: Window length in samples. Typically, the duration of a BCI trial
         offset: Trial offset (see offset documentation)
-        nc: Number of classes (non-zero tags)
-        clabels: Labels of the classes
+        nClasses: Number of classes (non-zero tags)
+        cLabels: Labels of the classes
         stim: The stimulation vector
         mark: The marker vectors (list of lists of sample indices for each class)
         y: The non-zero tags of stim as a vector. Each tag is the class label of the corresponding trial
@@ -71,16 +71,16 @@ class EEG:
     run: int
     sensors: List[str]
     sr: int  # sampling rate
-    ne: int  # number of electrodes
+    nSensors: int  # number of sensors
     ns: int  # number of samples
     wl: int  # window length
     offset: int
-    nc: int  # number of classes
-    clabels: List[str]  # class labels
+    nClasses: int  # number of classes
+    cLabels: List[str]  # class labels
     stim: List[int]  # stimulation vector
     mark: List[List[int]]  # marker vectors
     y: List[int]  # class labels for each trial
-    X: np.ndarray  # EEG data matrix (ns × ne)
+    X: np.ndarray  # EEG data matrix (ns × nSensors)
     trials: Optional[List[np.ndarray]]  # individual trials (optional)
     
     def __post_init__(self):
@@ -88,16 +88,16 @@ class EEG:
         # Basic consistency checks
         if self.X.shape[0] != self.ns:
             raise ValueError(f"X samples ({self.X.shape[0]}) doesn't match ns ({self.ns})")
-        if self.X.shape[1] != self.ne:
-            raise ValueError(f"X channels ({self.X.shape[1]}) doesn't match ne ({self.ne})")
-        if len(self.sensors) != self.ne:
-            raise ValueError(f"Number of sensor labels ({len(self.sensors)}) doesn't match ne ({self.ne})")
+        if self.X.shape[1] != self.nSensors:
+            raise ValueError(f"X channels ({self.X.shape[1]}) doesn't match nSensors ({self.nSensors})")
+        if len(self.sensors) != self.nSensors:
+            raise ValueError(f"Number of sensor labels ({len(self.sensors)}) doesn't match nSensors ({self.nSensors})")
         if len(self.stim) != self.ns:
             raise ValueError(f"Stimulation vector length ({len(self.stim)}) doesn't match ns ({self.ns})")
-        if len(self.mark) != self.nc:
-            raise ValueError(f"Number of marker vectors ({len(self.mark)}) doesn't match nc ({self.nc})")
-        if len(self.clabels) != self.nc:
-            raise ValueError(f"Number of class labels ({len(self.clabels)}) doesn't match nc ({self.nc})")
+        if len(self.mark) != self.nClasses:
+            raise ValueError(f"Number of marker vectors ({len(self.mark)}) doesn't match nClasses ({self.nClasses})")
+        if len(self.cLabels) != self.nClasses:
+            raise ValueError(f"Number of class labels ({len(self.cLabels)}) doesn't match nClasses ({self.nClasses})")
     
 
     
@@ -110,37 +110,37 @@ class EEG:
 ∼∽∿∽∽∽∿∼∿∽∿∽∿∿∿∼∼∽∿∼∽∽∿∼∽∽∼∿∼∿∿∽∿∽∼∽∽∿∽∽
 NY format version (.formatversion): {self.formatversion}
 ∼∽∿∽∽∽∿∼∿∽∿∽∿∿∿∼∼∽∿∼∽∽∿∼∽∽∼∿∼∿∿∽∿∽∼∽∽∿∽∽
-.dbName            : {self.dbName}
-.condition         : {self.condition}
-.paradigm          : {self.paradigm}
-.subject           : {self.subject}
-.session           : {self.session}
-.run               : {self.run}
-.sensors           : {len(self.sensors)}-List[str]
-.sr(samp. rate)    : {self.sr}
-.ne(# electrodes)  : {self.ne}
-.ns(# samples)     : {self.ns}
-.wl(win. length)   : {self.wl}
-.offset            : {self.offset}
-.nc(# classes)     : {self.nc}
-.clabels(c=class)  : {len(self.clabels)}-List[str]
-.stim(ulations)    : {len(self.stim)}-List[int]
-.mark(ers)         : {[len(self.mark[i]) for i in range(len(self.mark))]}-Lists[int]
-.y (all c labels)  : {len(self.y)}-List[int]
-.X (EEG data)      : {r}x{c}-ndarray[{dtype}]
-.trials            : {'None' if self.trials is None else f'{len(self.trials)}-List[ndarray[{self.trials[0].dtype if self.trials else "unknown"}]]'}
+.dbName                 : {self.dbName}
+.condition              : {self.condition}
+.paradigm               : {self.paradigm}
+.subject                : {self.subject}
+.session                : {self.session}
+.run                    : {self.run}
+.sensors                : {len(self.sensors)}-List[str]
+.sr(samp. rate)         : {self.sr}
+.nSensors(# electrodes) : {self.nSensors}
+.ns(# samples)          : {self.ns}
+.wl(win. length)        : {self.wl}
+.offset                 : {self.offset}
+.nClasses(# classes)    : {self.nClasses}
+.cLabels(c=class)       : {len(self.cLabels)}-List[str]
+.stim(ulations)         : {len(self.stim)}-List[int]
+.mark(ers)              : {[len(self.mark[i]) for i in range(len(self.mark))]}-Lists[int]
+.y (all c labels)       : {len(self.y)}-List[int]
+.X (EEG data)           : {r}x{c}-ndarray[{dtype}]
+.trials                 : {'None' if self.trials is None else f'{len(self.trials)}-List[ndarray[{self.trials[0].dtype if self.trials else "unknown"}]]'}
 Dict: .id, .acquisition, .documentation"""
     
 
 def _standardizeClasses(paradigm: str, 
-                        clabels: List[str], 
+                        cLabels: List[str], 
                         clabelsval: List[int], 
                         stim: List[int]) -> Tuple[List[int], List[str]]:
     """
     `_standardizeClasses` function is exclusively used within `readNY` to normalize 
     EEG data numerical codes according to standard conventions.
     
-    It takes an experimental paradigm (MI, P300, ERP), class names (`clabels`), 
+    It takes an experimental paradigm (MI, P300, ERP), class names (`cLabels`), 
     the related numerical values(`clabelsval`), and the stim vector, then applies 
     a uniform mapping (e.g., "left_hand" → 1, "right_hand" → 2 for MI). 
     
@@ -153,7 +153,7 @@ def _standardizeClasses(paradigm: str,
     - P300: nontarget, target
     - ERP: not currently supported.
     
-    Returns a new standardized stim vector and clabels if it was not already the same mapping.
+    Returns a new standardized stim vector and cLabels if it was not already the same mapping.
     """
     
     # Define standardized mappings for each paradigm
@@ -178,7 +178,7 @@ def _standardizeClasses(paradigm: str,
         )
     
     # Check for unsupported classes (case insensitive)
-    clabels_lower = [label.lower() for label in clabels]
+    clabels_lower = [label.lower() for label in cLabels]
     unsupported_classes = [label for label in clabels_lower if label not in standard_mapping]
     
     # Throw error if unsupported classes found
@@ -198,7 +198,7 @@ def _standardizeClasses(paradigm: str,
     already_standardized = all(k == v for k, v in value_mapping.items())
     
     stim_standardized = stim.copy()
-    clabels_standardized = clabels.copy()
+    clabels_standardized = cLabels.copy()
     
     if already_standardized:
         print("✓ Class labels in file follow Eegle's conventions.")
@@ -209,15 +209,15 @@ def _standardizeClasses(paradigm: str,
             if stim_standardized[i] != 0 and stim_standardized[i] in value_mapping:
                 stim_standardized[i] = value_mapping[stim_standardized[i]]
         
-        # Reorder clabels according to standardized mapping
+        # Reorder cLabels according to standardized mapping
         sorted_indices = sorted(range(len(clabels_lower)), 
                               key=lambda i: standard_mapping[clabels_lower[i]])
-        clabels_standardized = [clabels[i] for i in sorted_indices]
+        clabels_standardized = [cLabels[i] for i in sorted_indices]
         
         # Create mapping display for user feedback
         mapping_display = []
         for k, v in value_mapping.items():
-            original_label = clabels[clabelsval.index(k)]
+            original_label = cLabels[clabelsval.index(k)]
             mapping_display.append(f"{original_label}({k}->{v})")
         
         print(f"\n✓ Class labels have been formatted according to Eegle's convention")
@@ -318,7 +318,7 @@ def readNY(filename: str,
     paradigm = info["id"]["paradigm"]  # Using string instead of Symbol like in Julia
     
     # Extract number of samples and electrodes
-    ns, ne = data["data"].shape
+    ns, nSensors = data["data"].shape
     
     # Extract offset for trial starting sample
     offset = info["stim"]["offset"]
@@ -364,20 +364,20 @@ def readNY(filename: str,
 
     # Added April-June 2025 to allow loading a file keeping only the chosen classes
     stim = [int(x) for x in stim]  # Convert to list of integers (equivalent to Vector{Int64})
-    nc = info["stim"]["nclasses"]  # Number of classes
+    nClasses = info["stim"]["nclasses"]  # Number of classes
     labels_dict = sorted(info["stim"]["labels"].items(), key=lambda x: x[1])  # Sort by value
-    clabels = [pair[0] for pair in labels_dict]  # Class labels (keys)
+    cLabels = [pair[0] for pair in labels_dict]  # Class labels (keys)
     clabelsval = [pair[1] for pair in labels_dict]  # Class values (values)
 
     if isinstance(classes, list):  # June 2025: classes is now Union[bool, List[str]]
-        missing_classes = set(classes) - set(clabels)
+        missing_classes = set(classes) - set(cLabels)
         if missing_classes:
             error_msg = (f"utils.py, function `readNY`: classes not found: "
-                        f"{', '.join(missing_classes)}. Available classes: {', '.join(clabels)}")
+                        f"{', '.join(missing_classes)}. Available classes: {', '.join(cLabels)}")
             raise ValueError(error_msg)
 
         classes_val = []  # memory efficient to declare type
-        classes_val = [clabelsval[clabels.index(c)] for c in classes]  # get stim values corresponding to classes selected
+        classes_val = [clabelsval[cLabels.index(c)] for c in classes]  # get stim values corresponding to classes selected
 
         un = sorted(set(stim))[1:]  # unique non-zero values, sorted (exclude 0)
         if not (set(un) & set(classes_val)):  # intersection is empty
@@ -389,15 +389,15 @@ def readNY(filename: str,
                 if stim[i] in elimina:
                     stim[i] = 0
 
-        nc = len(classes)
-        clabels = [c for c in clabels if c in classes]
+        nClasses = len(classes)
+        cLabels = [c for c in cLabels if c in classes]
         clabelsval = [c for c in clabelsval if c in classes_val]  # needed for stdClass
 
         if stdClass:  # STANDARDIZE classes if std_class is set to True and classes is a list
-            stim, clabels = _standardizeClasses(paradigm, clabels, clabelsval, stim)
+            stim, cLabels = _standardizeClasses(paradigm, cLabels, clabelsval, stim)
     else:
         if stdClass:  # STANDARDIZE classes if std_class is set to True and classes is a bool
-            stim, clabels = _standardizeClasses(paradigm, clabels, clabelsval, stim)
+            stim, cLabels = _standardizeClasses(paradigm, cLabels, clabelsval, stim)
 
     # Make sure all stimulations+offset+wl does not exceed the recording duration
     for s in range(len(stim)):
@@ -417,13 +417,13 @@ def readNY(filename: str,
         offset = 0
 
     # Verify number of classes matches number of markers
-    if len(mark) != nc:
+    if len(mark) != nClasses:
         raise RuntimeError("utils.py, function `readNY`: the number of classes in .mark does not correspond to the number of markers found in .stim")
 
     # Extract trials if classes is not False
     trials = None if classes is False else [
         X[mark[i][j]:mark[i][j] + wl, :]
-        for i in range(nc)
+        for i in range(nClasses)
         for j in range(len(mark[i]))
     ]
 
@@ -444,15 +444,15 @@ def readNY(filename: str,
         run=info["id"]["run"],
         sensors=info["acquisition"]["sensors"],
         sr=sr,
-        ne=ne,
+        nSensors=nSensors,
         ns=ns,
         wl=wl,
         offset=offset,  # trials offset
-        nc=nc,
-        clabels=clabels,
+        nClasses=nClasses,
+        cLabels=cLabels,
         stim=stim,
         mark=mark,
-        y=[i+1 for i in range(nc) for j in range(len(mark[i]))],  # y: all labels
+        y=[i+1 for i in range(nClasses) for j in range(len(mark[i]))],  # y: all labels
         X=X,  # whole EEG recording
         trials=trials  # all trials, by class, if requested, None otherwise
     )

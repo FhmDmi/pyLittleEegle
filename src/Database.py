@@ -5,9 +5,9 @@
 #
 # ? ¤ CONTENT ¤ ? 
 #
-# - infoDB: dataclass holding information summarizing an EEG database
-# - loadNYdb: return a list of .npz files in a directory
-# - infoNYdb: print and return information about a database
+# - InfoDB: dataclass holding information summarizing an EEG database
+# - loadDB: return a list of .npz files in a directory
+# - infoDB: print and return information about a database
 # - selectDB: select database folders based on paradigm and class requirements
 
 import os
@@ -27,7 +27,7 @@ class InfoDB:
     Immutable dataclass holding the summary information and metadata 
     of an EEG database (DB) in NY format.
     
-    It is created by functions infoNYdb() and selectDB().
+    It is created by functions infoDB() and selectDB().
     
     Attributes:
         dbName: name or identifier of the database
@@ -154,7 +154,7 @@ Fourteen Additional fields:
 
 
 
-def loadNYdb(dbDir: str, isin: str = "") -> List[str]:
+def loadDB(corpusDir: str, isin: str = "") -> List[str]:
     """
     Return a list of the complete paths of all .npz files found in a directory.
     
@@ -162,18 +162,18 @@ def loadNYdb(dbDir: str, isin: str = "") -> List[str]:
     the same name and extension .yml, otherwise the file is not included in the list.
     
     Args:
-        dbDir: directory path containing the database files
+        corpusDir: directory path containing the database files
         isin: if provided, only files whose name contains this string are included
         
     Returns:
         List of complete paths to .npz files
         
     Examples:
-        >>> files = loadNYdb("/path/to/database")
-        >>> files = loadNYdb("/path/to/database", isin="subject01")
+        >>> files = loadDB("/path/to/database")
+        >>> files = loadDB("/path/to/database", isin="subject01")
     """
-    # Create a list of all .npz files found in dbDir (complete path)
-    npzFiles = getFilesInDir(dbDir, ext=(".npz",), isin=isin)
+    # Create a list of all .npz files found in corpusDir (complete path)
+    npzFiles = getFilesInDir(corpusDir, ext=(".npz",), isin=isin)
     
     # Check if for each .npz file there is a corresponding .yml file
     missingYML = []
@@ -183,7 +183,7 @@ def loadNYdb(dbDir: str, isin: str = "") -> List[str]:
             missingYML.append(i)
     
     if missingYML:
-        warnings.warn("Database.loadNYdb: the following .yml files have not been found:")
+        warnings.warn("Database.loadDB: the following .yml files have not been found:")
         for i in missingYML:
             print(os.path.splitext(npzFiles[i])[0] + ".yml")
         
@@ -195,38 +195,38 @@ def loadNYdb(dbDir: str, isin: str = "") -> List[str]:
     return npzFiles
 
 
-def infoNYdb(dbDir: str) -> infoDB:
+def infoDB(corpusDir: str) -> InfoDB:
     """
-    Create an infoDB structure and show it in the console.
+    Create an InfoDB structure and show it in the console.
     
-    The only argument (dbDir) is the directory holding all files of a database
+    The only argument (corpusDir) is the directory holding all files of a database
     in NY format.
     
     This function carries out sanity checks on the database and prints warnings
     if the checks fail.
     
     Args:
-        dbDir: directory path containing the database files
+        corpusDir: directory path containing the database files
         
     Returns:
-        infoDB object containing database information
+        InfoDB object containing database information
         
     Examples:
-        >>> db = infoNYdb("/path/to/database")
+        >>> DB = infoDB("/path/to/database")
     """
-    files = loadNYdb(dbDir)
+    files = loadDB(corpusDir)
     
     # Make sure only .npz files have been passed
     files = [f for f in files if os.path.splitext(f)[1] == ".npz"]
     
     if len(files) == 0:
-        raise ValueError("Database.infoNYdb: there are no .npz files in the list")
+        raise ValueError("Database.infoDB: there are no .npz files in the list")
     
     # Read one YAML file to initialize lists
     filename = files[0]
     yml_file = os.path.splitext(filename)[0] + ".yml"
     if not os.path.isfile(yml_file):
-        raise FileNotFoundError(f"Database.infoNYdb: no .yml file found for {filename}")
+        raise FileNotFoundError(f"Database.infoDB: no .yml file found for {filename}")
     
     with open(yml_file, 'r') as f:
         info = yaml.safe_load(f)
@@ -267,7 +267,7 @@ def infoNYdb(dbDir: str) -> infoDB:
     for filename in files:
         yml_file = os.path.splitext(filename)[0] + ".yml"
         if not os.path.isfile(yml_file):
-            raise FileNotFoundError(f"Database.infoNYdb: no .yml file found for {filename}")
+            raise FileNotFoundError(f"Database.infoDB: no .yml file found for {filename}")
         
         with open(yml_file, 'r') as f:
             info = yaml.safe_load(f)
@@ -313,7 +313,7 @@ def infoNYdb(dbDir: str) -> infoDB:
     def mywarn(text: str):
         nonlocal nwarnings
         nwarnings += 1
-        warnings.warn(f"Database.infoNYdb: {text}")
+        warnings.warn(f"Database.infoDB: {text}")
     
     # Helper function to compare lists/dicts for uniqueness
     def stringify(obj):
@@ -339,13 +339,13 @@ def infoNYdb(dbDir: str) -> infoDB:
     # CRITICAL ERROR CHECK: unicity of triplets (subject, session, run)
     ssr = [(s, sess, r) for s, sess, r in zip(subject, session, run)]
     if len(set(ssr)) < len(subject):
-        raise ValueError("Database.infoNYdb: there are duplicated triplets (subject, session, run)")
+        raise ValueError("Database.infoDB: there are duplicated triplets (subject, session, run)")
     
     # CRITICAL ERROR CHECK: session count consistency
     usub = list(set(subject))
     sess = [sum(1 for s in subject if s == sub) for sub in usub]  # sessions per subject
     if sum(sess) != len(files):
-        raise ValueError("Database.infoNYdb: number of sessions doesn't match number of files")
+        raise ValueError("Database.infoDB: number of sessions doesn't match number of files")
     
     # Warning about run field inconsistency
     if len(set(run)) > 1:
@@ -411,7 +411,7 @@ def infoNYdb(dbDir: str) -> infoDB:
         db_nTrials[class_name] = trials
     
     # Create and return infoDB structure
-    return infoDB(
+    return InfoDB(
         dbName=db_dbName,
         condition=db_condition,
         paradigm=db_paradigm,
@@ -447,13 +447,13 @@ def selectDB(corpusDir: str,
              classes: Optional[List[str]] = None,
              minTrials: Optional[int] = None,
              summarize: bool = True,
-             verbose: bool = False) -> List[infoDB]:
+             verbose: bool = False) -> List[InfoDB]:
     """
     Select BCI databases pertaining to the given BCI paradigm and all sessions
     meeting the provided inclusion criteria.
     
-    Return the selected databases as a list of infoDB structures, wherein the
-    infoDB.files field lists the included sessions only.
+    Return the selected databases as a list of InfoDB structures, wherein the
+    InfoDB.files field lists the included sessions only.
     
     Args:
         corpusDir: directory on local computer where to start the search
@@ -465,7 +465,7 @@ def selectDB(corpusDir: str,
         verbose: if True, print additional feedback
         
     Returns:
-        List of infoDB structures for selected databases
+        List of InfoDB structures for selected databases
         
     Examples:
         >>> DB_P300 = selectDB("/path/to/corpus", "P300")
@@ -498,7 +498,7 @@ def selectDB(corpusDir: str,
               "All databases will be returned.")
         print("Info: If you plan to train ML models, specify 'classes' argument.")
     
-    selectedDB = []  # List of infoDB structures
+    selectedDB = []  # List of InfoDB structures
     all_cLabels = set()  # All available classes
     excluded_files_info = []  # (database_name, excluded_files)
     
@@ -510,7 +510,7 @@ def selectDB(corpusDir: str,
               (" (no class filter)" if classes is None else f" containing: {', '.join(classes)}"))
     
     for dbDir in dbDirs:
-        info = infoNYdb(dbDir)
+        info = infoDB(dbDir)
         
         # Skip if paradigm doesn't match
         if info.paradigm.upper() != paradigm:
