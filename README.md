@@ -11,7 +11,7 @@ Marco Congedo (CNRS, University Grenoble Alpes, Grenoble)
 This repository contains a suite of Python tools designed to manage, process, and analyze EEG data from the [**FII BCI Corpus**](https://marco-congedo.github.io/Eegle.jl/dev/documents/FII%20BCI%20Corpus%20Overview/), specifically formatted in the [**NY format**](https://marco-congedo.github.io/Eegle.jl/dev/documents/NY%20format/).
 
 **pyLittleEegle** is a pure-Python, **PyRiemann-friendly** port of the core BCI functionalities from the Julia [Eegle](https://github.com/Marco-Congedo/Eegle.jl) package.
-It leverages the Python scientific ecosystem (`numpy`, `pandas`, `scikit-learn`, `pyriemann`, `scipy`, etc.) to streamline the management of **NY-format** databases and facilitate BCI classification pipelines.
+It leverages the Python scientific ecosystem to streamline the management of **NY-format** databases and facilitate BCI classification pipelines.
 
 ## Core Dependencies
 
