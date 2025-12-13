@@ -22,7 +22,7 @@ import numpy as np
 from utils import getFilesInDir, getFoldersInDir
 
 @dataclass
-class infoDB:
+class InfoDB:
     """
     Immutable dataclass holding the summary information and metadata 
     of an EEG database (DB) in NY format.
