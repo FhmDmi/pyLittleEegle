@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/src/assets/full logo.png" width="400" title="">
+</p>
+
 # pyLittleEegle: Python package for FII BCI Corpus
 
 **Version:** 0.1 (Dec 2025)  
