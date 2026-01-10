@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pylittleeegle"
+version = "0.1.0"
+authors = [
+  { name="Fahim Doumi", email="fahim.doumi.pro@gmail.com" },
+  { name="Marco Congedo", email="marcocongedo@gmail.com" },
+]
+description = "Python package for FII BCI Corpus (NY format). A lightweight Eegle.jl port."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Intended Audience :: Science/Research",
+]
+dependencies = [
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "pyriemann",
+    "scipy",
+    "pyyaml"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/FhmDmi/pyLittleEegle"
+"Bug Tracker" = "https://github.com/FhmDmi/pyLittleEegle/issues"

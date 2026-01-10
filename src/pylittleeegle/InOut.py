@@ -15,7 +15,7 @@ import numpy as np
 import yaml
 import os 
 import warnings
-import utils
+from . import utils
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any, Union, Tuple
 from scipy import signal

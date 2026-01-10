@@ -16,7 +16,7 @@ from pyriemann.estimation import Covariances, ERPCovariances
 from sklearn.model_selection import StratifiedKFold
 from typing import List, Union, Optional
 from sklearn.metrics import balanced_accuracy_score
-from InOut import EEG
+from .InOut import EEG
 
 @dataclass
 class CVres:

@@ -19,7 +19,7 @@ import pandas as pd
 import numpy as np
 
 # Import your already converted functions
-from utils import getFilesInDir, getFoldersInDir
+from .utils import getFilesInDir, getFoldersInDir
 
 @dataclass
 class InfoDB:
