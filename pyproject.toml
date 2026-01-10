@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pylittleeegle"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
   { name="Fahim Doumi", email="fahim.doumi.pro@gmail.com" },
   { name="Marco Congedo", email="marcocongedo@gmail.com" },
 ]
 description = "Python package for FII BCI Corpus (NY format). A lightweight Eegle.jl port."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: BSD License",
