@@ -1,12 +1,12 @@
 # Database module for EEG database management in NY format.
-# v 0.1 Dec 2025
+# v 0.2 Aug 2026
 # Part of the Eegle package - Python version
 # Copyright Fahim Doumi, CeSMA, Marco Congedo, CNRS, University Grenoble Alpes.
 #
 # ? ¤ CONTENT ¤ ? 
 # This script comprised utils used in different modules
 
-import os
+import os, numpy as np
 from typing import List, Optional
 
 def getFilesInDir(directory, ext=None, isin=""):
@@ -145,3 +145,198 @@ def mark2stim(mark: List[List[int]],
     
     return stim
 
+
+def car(X, correction=0, inplace=True):
+    """
+    Re-reference `X` to the Common Average Reference (CAR),
+    setting the mean of the rows of `X` to zero (or adjusted by correction).
+    Port of Eegle.jl's `car!`.
+
+    Parameters
+    ----------
+    X : ndarray, shape (T, N)
+        The EEG recording (T samples, N channels).
+    correction : int or float, default=0
+        Non-negative adjustment factor.
+        - When 0: standard CAR (sum of rows divided by N).
+        - When > 0: sum of rows divided by (N + correction).
+        A value of 1 yields reference method 'B' from Kim2023GhostICs.
+    inplace : bool, default=True
+        If True, modifies `X` in-place (matching Julia `car!` behavior).
+        If False, operates on a copy and leaves original `X` unchanged.
+
+    Returns
+    -------
+    ndarray, shape (T, N)
+        The re-referenced matrix.
+    """
+    if correction < 0:
+        raise ValueError("pyLittleEegle `car`: `correction` must be non-negative.")
+
+    # Ensure working on floats to prevent UFuncTypeError on in-place subtraction
+    if not np.issubdtype(X.dtype, np.floating):
+        X = X.astype(np.float64)
+        inplace = False  # Array was already copied during type conversion
+
+    target = X if inplace else X.copy()
+    n_channels = target.shape[1]
+
+    denom = n_channels if correction == 0 else (n_channels + correction)
+    avg = np.sum(target, axis=1, keepdims=True) / denom
+
+    target -= avg
+    return target
+
+
+def global_field_power(X, func=None):
+    """
+    Compute the Global Field Power (GFP), defined as the sample-by-sample
+    total EEG power (sum of squared channel potentials per time sample).
+    Port of Eegle.jl's `globalFieldPower`.
+
+    Parameters
+    ----------
+    X : ndarray, shape (T, N)
+        The EEG recording (T samples, N channels).
+    func : callable, optional
+        Function applied element-wise to the output.
+
+    Returns
+    -------
+    ndarray, shape (T,)
+        GFP values for each sample.
+    """
+    gfp = np.sum(X**2, axis=1)
+    return func(gfp) if func is not None else gfp
+
+
+def global_field_rms(X, func=None):
+    """
+    Compute the Global Field Root Mean Square (GFRMS), defined as the square root
+    of the GFP divided by the number of electrodes.
+    Port of Eegle.jl's `globalFieldRMS`.
+
+    Parameters
+    ----------
+    X : ndarray, shape (T, N)
+        The EEG recording (T samples, N channels).
+    func : callable, optional
+        Function applied element-wise to the output (e.g., `np.log`).
+
+    Returns
+    -------
+    ndarray, shape (T,)
+        GFRMS values for each sample.
+    """
+    gfrms = np.sqrt(np.mean(X**2, axis=1))
+
+    if func is not None:
+        # Ignore divide-by-zero warnings to match Julia's silent -Inf handling on log(0)
+        with np.errstate(divide="ignore"):
+            return func(gfrms)
+    return gfrms
+
+
+def reject(X, stim, wl, offset=0, upper_limit=1.2, return_details=False):
+    """
+    Automatic rejection of artifacted trials in tagged EEG data
+    via adaptive log-GFRMS amplitude thresholding.
+    Port of Eegle.jl's `reject`.
+
+    Parameters
+    ----------
+    X : ndarray, shape (T, N)
+        The whole EEG recording (T samples, N channels).
+    stim : array-like, shape (T,)
+        Stimulation vector containing integer tags (0 indicates no event).
+    wl : int
+        Trial / ERP window length in samples.
+    offset : int, default=0
+        Offset in samples for marker positions passed to `stim2mark`.
+    upper_limit : float, default=1.2
+        Multiplier modulating the upper rejection threshold (typically in [1.0, 1.6]).
+    return_details : bool, default=False
+        If True, returns a 9-tuple containing debug thresholds and log-GFRMS array.
+
+    Returns
+    -------
+    cleanstim : ndarray, shape (T,)
+        Stimulation vector with rejected trials set to 0.
+    rejecstim : ndarray, shape (T,)
+        Stimulation vector containing only rejected trials (accepted set to 0).
+    cleanmark : list of list of int
+        Marker vectors for accepted trials, produced by `stim2mark`.
+    rejecmark : list of list of int
+        Marker vectors for rejected trials, produced by `stim2mark`.
+    rejected : ndarray of int, shape (n_classes,)
+        Count of rejected trials per unique class.
+    (Optional details) : frms, m, thr_down, thr_up
+    """
+    ns, ne = X.shape
+    stim = np.asarray(stim, dtype=int)
+
+    if len(stim) != ns:
+        raise ValueError(
+            f"pyLittleEegle `reject`: `stim` length ({len(stim)}) does not match sample count in `X` ({ns})."
+        )
+
+    # Compute natural logarithm of GFRMS
+    frms = global_field_rms(X, func=np.log)
+
+    cleanstim = stim.copy()
+    unique_tags = np.unique(stim)
+    classcode = np.sort(unique_tags[unique_tags > 0])
+    nc = len(classcode)
+    rejected = np.zeros(nc, dtype=int)
+
+    # Sorted log-GFRMS for adaptive thresholding
+    p = np.argsort(frms)
+
+    # Central tendency estimator m: mean of 2*wl values around median
+    mid = ns // 2
+    start_idx = max(0, mid - wl)
+    end_idx = min(ns, mid + wl + 1)  # +1 to match Julia inclusive range
+    m = np.mean(frms[p][start_idx:end_idx])
+
+    # Lower threshold: 10th smallest value (index 9) to avoid outlier log near zero
+    thr_down = frms[p][min(9, ns - 1)]
+
+    # Upper threshold
+    thr_up = m + ((m - thr_down) * upper_limit)
+
+    stim_to_index = {val: i for i, val in enumerate(classcode)}
+
+    # Pass 1: Reject epochs with near-zero signal (mean GFRMS < thr_down)
+    skip_until = 0
+    for s in range(ns - wl + 1):
+        if s < skip_until:
+            continue
+        current_stim = cleanstim[s]
+        if current_stim > 0:
+            if np.mean(frms[s : s + wl]) < thr_down:
+                skip_until = s + wl
+                rejected[stim_to_index[current_stim]] += 1
+                cleanstim[s : s + wl] = 0
+
+    # Pass 2: Reject epochs with high-amplitude artifacts (max GFRMS > thr_up)
+    skip_until = 0
+    for s in range(ns - wl + 1):
+        if s < skip_until:
+            continue
+        current_stim = cleanstim[s]
+        if current_stim > 0:
+            if np.max(frms[s : s + wl]) > thr_up:
+                skip_until = s + wl
+                rejected[stim_to_index[current_stim]] += 1
+                cleanstim[s : s + wl] = 0
+
+    rejecstim = stim - cleanstim
+
+    # Generate marker vectors using internal stim2mark
+    code_list = classcode.tolist()
+    cleanmark = stim2mark(cleanstim.tolist(), wl, offset=offset, code=code_list)
+    rejecmark = stim2mark(rejecstim.tolist(), wl, offset=offset, code=code_list)
+
+    if return_details:
+        return cleanstim, rejecstim, cleanmark, rejecmark, rejected, frms, m, thr_down, thr_up
+    return cleanstim, rejecstim, cleanmark, rejecmark, rejected

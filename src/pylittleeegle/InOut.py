@@ -1,5 +1,5 @@
 # Database module for EEG database management in NY format.
-# v 0.1 Dec 2025
+# v 0.2 Aug 2026
 # Part of the Eegle package - Python version
 # Copyright Fahim Doumi, CeSMA, Marco Congedo, CNRS, University Grenoble Alpes.
 #
@@ -234,6 +234,7 @@ def readNY(filename: str,
            bpDesign: int = 4,
            classes: Union[bool, List[str]] = True,
            stdClass: bool = True,
+           upperLimit: Union[float, int] = 0,
            msg: str = "") -> EEG:
     """
     Read EEG/BCI data in NY format, preprocess them if desired, and create an EEG structure.
@@ -258,18 +259,10 @@ def readNY(filename: str,
               and written in the .stim and y fields of the output
             - If False, the field trials of the returned EEG structure will be set to None.
         stdClass: 
-            - if True (default), a standardization is applied to the class labels, according to predefined 
-              conventions to facilitate transfer learning and model training across heterogeneous databases.
-              The standardization applies uniform numerical codes regardless of the original database encoding:
-              - **MI paradigm**: "left_hand" → 1, "right_hand" → 2, "feet" → 3, "rest" → 4, "both_hands" → 5, "tongue" → 6
-              - **P300 paradigm**: "nontarget" → 1, "target" → 2
-              - **ERP paradigm**: not currently supported
-            - if False, original class labels and their corresponding numerical values are preserved as found in the database
-            The standardization is case-insensitive, but requires correct spelling of class names.
-            When used with classes as a list of class labels, standardization is applied after class selection.
-            If class labels are already standardized, the original mapping is preserved.
-            It is recommended to leave the default setting for stdClass (True) when all relevant classes 
-            are available in your database configuration.
+            - if True (default), a standardization is applied to the class labels.
+            - if False, original class labels and their corresponding numerical values are preserved.
+        upperLimit: argument passed to `reject` for artifact rejection. 
+                    0 means no artifact rejection (default: 0).
         msg: print string msg on exit if it is not empty. By default it is empty.
     
     Notes:
@@ -280,19 +273,6 @@ def readNY(filename: str,
     
     Returns:
         An EEG data structure.
-    
-    Examples:
-        # Using examples data provided by Eegle
-        o = readNY(EXAMPLE_P300_1)
-        
-        # filter the data and do artifact-rejection by adaptive amplitude thresholding
-        o = readNY(EXAMPLE_P300_1, bandPass=(1, 24))
-        
-        # read the whole recording, but store in o.trials the trials 
-        # only for classes "right_hand" and "feet" (exclude "rest")
-        o = readNY(EXAMPLE_MI_1,
-                   bandPass=(1, 24), 
-                   classes=["right_hand", "feet"])
     """
     # Read data file (.npz) and info file (.yml)
     base_filename = os.path.splitext(filename)[0]
@@ -344,9 +324,10 @@ def readNY(filename: str,
         low = bandStop[0] / nyquist
         high = bandStop[1] / nyquist
         b, a = signal.butter(bsDesign, [low, high], btype='bandstop')
-        padlen = min(3 * (max(len(b), len(a)) - 1), len(input_data) - 1) 
+        # FIX: len(data["data"]) instead of undefined len(input_data)
+        padlen = min(3 * (max(len(b), len(a)) - 1), data["data"].shape[0] - 1) 
         X = signal.filtfilt(b, a, data["data"].astype(np.float64) if conversion else data["data"], 
-                        padtype='odd', padlen=padlen, method='pad', axis=0)
+                            padtype='odd', padlen=padlen, method='pad', axis=0)
 
     if bandPass:
         nyquist = sr / 2
@@ -373,10 +354,9 @@ def readNY(filename: str,
         missing_classes = set(classes) - set(cLabels)
         if missing_classes:
             error_msg = (f"utils.py, function `readNY`: classes not found: "
-                        f"{', '.join(missing_classes)}. Available classes: {', '.join(cLabels)}")
+                         f"{', '.join(missing_classes)}. Available classes: {', '.join(cLabels)}")
             raise ValueError(error_msg)
 
-        classes_val = []  # memory efficient to declare type
         classes_val = [clabelsval[cLabels.index(c)] for c in classes]  # get stim values corresponding to classes selected
 
         un = sorted(set(stim))[1:]  # unique non-zero values, sorted (exclude 0)
@@ -404,12 +384,21 @@ def readNY(filename: str,
         if stim[s] > 0 and s + offset + wl - 1 > X.shape[0]:
             stim[s] = 0
             warnings.warn(f"utils.py, function `readNY`: the {s}th stimulation at sample {stim[s]} "
-                        f"with offset {offset} and trial duration {wl} defines a trial exceeding the "
-                        f"recording length. The stimulation has been eliminated.")
+                          f"with offset {offset} and trial duration {wl} defines a trial exceeding the "
+                          f"recording length. The stimulation has been eliminated.")
 
+    # auto art rejection
+    if upperLimit != 0:
+        # artefact rejection; change stim and compute mark 
+        stim, rejecstim, mark, rejecmark, rejected = utils.reject(
+            X, stim, wl, offset=offset, upper_limit=upperLimit
+        )
+        # Convert numpy array back to list if modified by reject
+        stim = stim.tolist() if isinstance(stim, np.ndarray) else stim
+    else:
+        # only mark, i.e., samples where the trials start for each class
+        mark = utils.stim2mark(stim, wl, offset=offset, code=sorted(set(stim))[1:])  # exclude 0
 
-    # Convert stim to markers with offset, then back to stim (applies offset)
-    mark = utils.stim2mark(stim, wl, offset=offset, code=sorted(set(stim))[1:])  # exclude 0
     stim = utils.mark2stim(mark, ns)  # new stim with offset taken into account
 
     if offset != 0:  # offset reset to 0
@@ -447,7 +436,7 @@ def readNY(filename: str,
         nSensors=nSensors,
         ns=ns,
         wl=wl,
-        offset=offset,  # trials offset
+        offset=offset,  # trials offset (reset to 0)
         nClasses=nClasses,
         cLabels=cLabels,
         stim=stim,
@@ -456,4 +445,3 @@ def readNY(filename: str,
         X=X,  # whole EEG recording
         trials=trials  # all trials, by class, if requested, None otherwise
     )
-

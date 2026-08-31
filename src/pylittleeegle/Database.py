@@ -1,5 +1,5 @@
 # Database module for EEG database management in NY format.
-# v 0.1 Dec 2025
+# v 0.2 Aug 2026
 # Part of the Eegle package - Python version
 # Copyright Fahim Doumi, CeSMA, Marco Congedo, CNRS, University Grenoble Alpes.
 #
@@ -13,10 +13,10 @@
 import os
 import warnings
 from dataclasses import dataclass
-from typing import List, Dict, Optional
 import yaml
 import pandas as pd
-import numpy as np
+from typing import Dict, List, Optional, Any, Union, Tuple, Callable
+
 
 # Import your already converted functions
 from .utils import getFilesInDir, getFoldersInDir
@@ -90,7 +90,7 @@ class InfoDB:
         """Custom representation similar to Julia's show function"""
         import math
         
-        # Format ntrials_per_class - show mean ± std + min,max
+        # Format ntrialsperclass - show mean ± std + min,max
         trials_parts = []
         for class_name in self.cLabels:  # use cLabels to maintain order
             trials_vec = self.nTrials[class_name]
@@ -287,7 +287,7 @@ def infoDB(corpusDir: str) -> InfoDB:
         labels.append(stim["labels"])
         offset.append(stim["offset"])
         nClasses.append(stim["nclasses"])
-        nTrials.append(stim["trials_per_class"])
+        nTrials.append(stim["trialsperclass"])
         
         id_info = info["id"]
         timestamp.append(id_info["timestamp"])
@@ -441,13 +441,162 @@ def infoDB(corpusDir: str) -> InfoDB:
         formatVersion=db_formatVersion
     )
 
+class CaseInsensitiveList(list):
+    """A list of strings that allows case-insensitive 'in' checks."""
+    def __contains__(self, item):
+        if isinstance(item, str):
+            return item.lower() in (str(x).lower() for x in self)
+        return super().__contains__(item)
 
+def _get_nested_value(data: Dict, path: str) -> Any:
+    """Extract value from nested dictionary using dot-separated path."""
+    shortcuts = {
+        "sr": "acquisition.samplingrate",
+        "ref": "acquisition.reference",
+        "tpc": "stim.trialsperclass",
+        "perfLHRH": "perf.left_hand-right_hand",
+        "perfRHF": "perf.right_hand-feet"
+    }
+    
+    resolved_path = shortcuts.get(path, path)
+    
+    for shortcut, full_path in shortcuts.items():
+        if path.startswith(shortcut + "."):
+            resolved_path = path.replace(shortcut, full_path, 1)
+            break
+            
+    keys_path = resolved_path.split('.')
+    
+    if len(keys_path) == 1:
+        key = keys_path[0]
+        if key in data:
+            return data[key]
+            
+        # Recursive search
+        def _find(d, k):
+            if k in d: return d[k]
+            for v in d.values():
+                if isinstance(v, dict):
+                    res = _find(v, k)
+                    if res is not None: return res
+            return None
+            
+        val = _find(data, key)
+        if val is not None:
+            return val
+        raise KeyError(f"Key '{key}' not found in YAML (searched at root and nested levels)")
+        
+    current = data
+    for key in keys_path:
+        if key not in current:
+            raise KeyError(f"Key '{key}' not found in path '{resolved_path}'")
+        current = current[key]
+        
+    return current
+
+def _get_all_perf_values(perf_dict: Dict) -> List[float]:
+    """Extract all numeric values from nested perf dictionary."""
+    vals = []
+    for v in perf_dict.values():
+        if isinstance(v, (int, float)):
+            vals.append(float(v))
+        elif isinstance(v, dict):
+            vals.extend(_get_all_perf_values(v))
+    return vals
+
+def _filter(files: List[str], 
+            inclusion: Optional[Tuple], 
+            verbose: bool = False, 
+            show_progress: bool = False) -> Tuple[List[int], List[Tuple[str, str, bool]]]:
+    """Internal function to filter session files based on YAML metadata criteria."""
+    if not inclusion:
+        return list(range(len(files))), []
+        
+    valid_indices = []
+    files_info = []
+    
+    shortcuts = {
+        "sr": "acquisition.samplingrate", 
+        "ref": "acquisition.reference", 
+        "perfLHRH": "perf.left_hand-right_hand", 
+        "perfRHF": "perf.right_hand-feet"
+    }
+    
+    perf_filters_present = any(
+        fp.startswith("perf") or shortcuts.get(fp, "").startswith("perf")
+        for fp, _ in inclusion
+    )
+    
+    if show_progress:
+        print(f"\n{'─' * 65}\n🔍 Applying {len(inclusion)} filter(s) to {len(files)} session(s)...")
+        
+    for file_idx, file_path in enumerate(files):
+        yml_path = os.path.splitext(file_path)[0] + ".yml"
+        
+        if not os.path.isfile(yml_path):
+            files_info.append((file_path, "Missing YAML file", False))
+            if show_progress: print(f"  ✗ {os.path.basename(file_path)}: Missing YAML file")
+            continue
+            
+        with open(yml_path, 'r') as f:
+            yaml_data = yaml.safe_load(f)
+            
+        if perf_filters_present:
+            if "perf" not in yaml_data:
+                files_info.append((file_path, "Auto-rejected: no 'perf' section in YAML", False))
+                if show_progress: print(f"  ✗ {os.path.basename(file_path)}: Auto-rejected: no 'perf' section")
+                continue
+                
+            perf_values = _get_all_perf_values(yaml_data["perf"])
+            if perf_values and all(0 <= v <= 0.2 for v in perf_values):
+                files_info.append((file_path, "Auto-rejected: all perf values ∈ [0, 0.2]", False))
+                if show_progress: print(f"  ✗ {os.path.basename(file_path)}: Auto-rejected: all perf values ∈ [0, 0.2]")
+                continue
+                
+        session_valid, status_msg = True, ""
+        
+        for filter_idx, (field_path, predicate) in enumerate(inclusion):
+            try:
+                value = _get_nested_value(yaml_data, field_path)
+                if isinstance(value, list) and all(isinstance(x, str) for x in value):
+                    value = CaseInsensitiveList(value)
+                    
+                if predicate(value):
+                    if filter_idx == len(inclusion) - 1:
+                        status_msg = f"Passed all {len(inclusion)} filter(s)"
+                else:
+                    session_valid = False
+                    status_msg = f"Filter #{filter_idx + 1} failed: '{field_path}' = {value}"
+                    break
+            except Exception as e:
+                session_valid = False
+                status_msg = f"Error in filter #{filter_idx + 1} on '{field_path}': {str(e)}"
+                break
+                
+        files_info.append((file_path, status_msg, session_valid))
+        if show_progress:
+            symbol = "✓" if session_valid else "✗"
+            print(f"  {symbol} {os.path.basename(file_path)}: {status_msg}")
+            
+        if session_valid:
+            valid_indices.append(file_idx)
+            
+    if show_progress:
+        print(f"{'─' * 65}\n✓ Result: {len(valid_indices)}/{len(files)} session(s) passed all filters\n")
+        
+    return valid_indices, files_info
+
+
+
+# ==============================================================================
+# MAIN SELECTDB FUNCTION
+# ==============================================================================
 def selectDB(corpusDir: str,
              paradigm: str,
              classes: Optional[List[str]] = None,
-             minTrials: Optional[int] = None,
+             inclusion: Optional[Tuple] = None,
              summarize: bool = True,
-             verbose: bool = False) -> List[InfoDB]:
+             verbose: bool = False) -> List['InfoDB']:
     """
     Select BCI databases pertaining to the given BCI paradigm and all sessions
     meeting the provided inclusion criteria.
@@ -460,7 +609,7 @@ def selectDB(corpusDir: str,
         paradigm: BCI paradigm to use ('P300', 'MI', or 'ERP')
         classes: labels of classes the databases must include
                  (default: ['target', 'nontarget'] for P300, None for MI/ERP)
-        minTrials: minimum number of trials for all classes in sessions
+        inclusion: tuple of custom filter conditions (field_path, lambda_function)
         summarize: if True, print a summary table of selected databases
         verbose: if True, print additional feedback
         
@@ -468,13 +617,25 @@ def selectDB(corpusDir: str,
         List of InfoDB structures for selected databases
         
     Examples:
+        >>> # Basic selection
         >>> DB_P300 = selectDB("/path/to/corpus", "P300")
-        >>> DB_MI = selectDB("/path/to/corpus", "MI", classes=["left_hand", "right_hand"])
-        >>> DB = selectDB("/path/to/corpus", "MI", classes=["rest", "feet"], minTrials=50)
+        
+        >>> # Selection with inclusion lambda filters (replaces minTrials)
+        >>> inclusion_filters = (
+        ...     ("sr", lambda x: x >= 256),
+        ...     ("tpc", lambda x: min(x.values()) >= 50),  # Minimum trials per class
+        ...     ("acquisition.sensors", lambda x: "Fz" in x)
+        ... )
+        >>> DB_MI = selectDB("/path/to/corpus", "MI", inclusion=inclusion_filters)
     """
     # Set default classes for P300
     if paradigm == "P300" and classes is None:
         classes = ["target", "nontarget"]
+        
+    # Auto-correct flat tuple format: ("field", lambda) → (("field", lambda),)
+    if inclusion is not None and len(inclusion) > 0 and isinstance(inclusion[0], str):
+        warnings.warn("Database.selectDB: `inclusion` was passed as a flat tuple — automatically wrapped. Add a trailing comma to avoid this: ((...),)")
+        inclusion = (inclusion,)
     
     # Validate paradigm
     if paradigm not in ("MI", "P300", "ERP"):
@@ -500,7 +661,8 @@ def selectDB(corpusDir: str,
     
     selectedDB = []  # List of InfoDB structures
     all_cLabels = set()  # All available classes
-    excluded_files_info = []  # (database_name, excluded_files)
+    db_filtering_info = []    # inclusion tracking: (database_name, files_info)
+    n_class_match = 0
     
     # Normalize classes to lowercase
     norm_classes = None if classes is None else [c.lower() for c in classes]
@@ -521,61 +683,68 @@ def selectDB(corpusDir: str,
         if classes is not None:
             if not all(req_class in [c.lower() for c in info.cLabels] for req_class in norm_classes):
                 continue
-        
-        # Handle minTrials filtering
-        if minTrials is not None:
-            excluded_files = []
-            valid_indices = []
-            classes_to_check = info.cLabels if classes is None else classes
-            
-            for file_idx, file_path in enumerate(info.files):
-                session_valid = True
-                for class_name in classes_to_check:
-                    # Find actual class name (case-insensitive)
-                    if classes is None:
-                        actual_class = class_name
-                    else:
-                        actual_class_list = [c for c in info.cLabels 
-                                           if c.lower() == class_name.lower()]
-                        actual_class = actual_class_list[0] if actual_class_list else None
-                    
-                    if actual_class and actual_class in info.nTrials:
-                        if info.nTrials[actual_class][file_idx] < minTrials:
-                            session_valid = False
-                            break
                 
-                if session_valid:
-                    valid_indices.append(file_idx)
-                else:
-                    excluded_files.append(file_path)
-            
-            # Skip database if no valid files
-            if not valid_indices:
-                if excluded_files:
-                    excluded_files_info.append((info.dbName, excluded_files))
-                continue
-            
-            # Filter files if some were excluded
-            if excluded_files:
-                excluded_files_info.append((info.dbName, excluded_files))
-                info.files = [info.files[i] for i in valid_indices]
+        n_class_match += 1
+
+        # Handle inclusion custom filters
+        if inclusion is not None:
+            # Remove paradigm and classes filters from inclusion if present
+            forbidden = [f for (f, _) in inclusion if f in ("paradigm", "classes")]
+            if forbidden:
+                warnings.warn(f"Database.selectDB: Filters automatically removed (conflict with function arguments): {', '.join(forbidden)}")
+                inclusion = tuple(filter(lambda x: x[0] not in ("paradigm", "classes"), inclusion))
+                if not inclusion:
+                    inclusion = None
+                    
+            if inclusion is not None:
+                # Apply custom filters
+                inc_valid_indices, files_info = _filter(info.files, inclusion, verbose=False, show_progress=False)
+                
+                if files_info:
+                    db_filtering_info.append((info.dbName, files_info))
+                    
+                if not inc_valid_indices:
+                    continue  # Skip database if no valid files
+                    
+                info.files = [info.files[i] for i in inc_valid_indices]
         
         selectedDB.append(info)
     
     if not selectedDB:
-        avail_classes = ", ".join(sorted(all_cLabels)) if all_cLabels else "none"
-        raise ValueError(f"Database.selectDB: No {paradigm} database contains all "
-                        f"selected classes: {', '.join(classes) if classes else 'N/A'}\n"
-                        f"Available classes: {avail_classes}")
-    
-    # Print excluded files info
-    if excluded_files_info:
-        print(f"\n{'─' * 65}")
-        print(f"⚠️  Files excluded due to insufficient trials per class (< {minTrials}):")
-        for dbName, files in excluded_files_info:
-            print(f"\n  Database: {dbName}")
-            for file in files:
-                print(f"    • {os.path.basename(file)}")
+        if inclusion is not None and n_class_match > 0:
+            raise ValueError(f"Database.selectDB: {n_class_match} {paradigm} database(s) matched paradigm/classes criteria but no session passed the `inclusion` filters.")
+        else:
+            avail_classes = ", ".join(sorted(all_cLabels)) if all_cLabels else "none"
+            raise ValueError(f"Database.selectDB: No {paradigm} database contains all "
+                             f"selected classes: {', '.join(classes) if classes else 'N/A'}\n"
+                             f"Available classes: {avail_classes}")
+                
+    # Print excluded files info from inclusion filters
+    if db_filtering_info:
+        if verbose:
+            print(f"\n{'═' * 65}")
+            print("⚠️  FILTERING RESULTS BY DATABASE")
+            print('═' * 65)
+            for dbName, files_info in db_filtering_info:
+                n_passed = sum(1 for _, _, passed in files_info if passed)
+                n_total = len(files_info)
+                print(f"\nDatabase: {dbName}")
+                print('─' * 65)
+                for file_path, status, passed in files_info:
+                    symbol = "✓" if passed else "✗"
+                    print(f"  {symbol} {os.path.basename(file_path)}: {status}")
+                print('─' * 65)
+                print(f"✓ Result: {n_passed}/{n_total} session(s) passed all filters")
+        else:
+            print(f"\n{'─' * 65}")
+            print("⚠️  Files excluded by custom filters:")
+            for dbName, files_info in db_filtering_info:
+                excluded = [os.path.basename(f) for f, _, passed in files_info if not passed]
+                if excluded:
+                    print(f"  Database: {dbName}")
+                    for f in excluded:
+                        print(f"    • {f}")
+            print('─' * 65, "\n")
     
     print()
     
@@ -586,7 +755,7 @@ def selectDB(corpusDir: str,
             print(f"  • {db.dbName} - {db.condition}")
         print('═' * 50)
     
-    # Create summary table
+# Create summary table
     if summarize:
         summary_data = []
         for db in selectedDB:
@@ -608,9 +777,12 @@ def selectDB(corpusDir: str,
             })
         
         summary_df = pd.DataFrame(summary_data)
+        
+        summary_df.index = summary_df.index
+        
         print("SUMMARY TABLE OF SELECTED DATABASES")
         print('═' * 150)
-        print(summary_df.to_string(index=True))
+        print(summary_df.to_string(index=True))  
         print('═' * 150)
         print("\n💡 For detailed trial counts per class, please inspect individual database structures")
     

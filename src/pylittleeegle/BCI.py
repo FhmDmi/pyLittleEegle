@@ -1,5 +1,5 @@
 # Database module for EEG database management in NY format.
-# v 0.1 Dec 2025
+# v 0.2 Aug 2026
 # Part of the Eegle package - Python version
 # Copyright Fahim Doumi, CeSMA, Marco Congedo, CNRS, University Grenoble Alpes.
 #
@@ -127,9 +127,9 @@ def encode(o: EEG,
         
         # Find target class index
         try:
-            target_idx = [label.lower() for label in o.clabels].index(targetLabel.lower())
+            target_idx = [label.lower() for label in o.cLabels].index(targetLabel.lower())
         except ValueError:
-            raise ValueError(f"Target label '{targetLabel}' not found among class labels: {o.clabels}")
+            raise ValueError(f"Target label '{targetLabel}' not found among class labels: {o.cLabels}")
         
         # Create labels array for trials
         labels = np.array(o.y)
