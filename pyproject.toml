@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pylittleeegle"
-version = "0.1.1"
+version = "0.2.0"
 authors = [
   { name="Fahim Doumi", email="fahim.doumi.pro@gmail.com" },
   { name="Marco Congedo", email="marcocongedo@gmail.com" },
